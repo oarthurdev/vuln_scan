@@ -17,6 +17,11 @@ cache = Cache(app, config={'CACHE_TYPE': 'simple'})
 def index():
     return render_template('index.html')
 
+@app.errorhandler(Exception)
+def handle_error(error):
+    error_message = str(error)
+    return render_template('error.html', error_message=error_message), 500
+
 @app.route('/scan', methods=['POST'])
 def scan():
     url = request.form.get('url').strip()
@@ -77,7 +82,8 @@ def create_task(url):
         'randomAgent': True
     }
 
-    task_response = requests.get(f"{sqlmap_url}/task/new", json=options)
+    session = requests.Session()
+    task_response = session.get(f"{sqlmap_url}/task/new", json=options)
 
     if task_response.status_code == 200:
         task_id = task_response.json().get("taskid")
@@ -160,7 +166,10 @@ def check_vulnerabilities(url):
     }
     
     # Perform the request to get the response
-    response = requests.get(url, headers=headers)
+    try:
+        response = requests.get(url, headers=headers)
+    except requests.exceptions.RequestException as e:
+        raise Exception(f"Error occurred during the request: {str(e)}")
 
     vulnerabilities = []
     vulnerabilities.append(check_mimetype_sniffing(response))

@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Error Page</title>
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.0/dist/css/bootstrap.min.css">
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+
+        .error-container {
+            margin: 0 auto;
+            padding: 50px 20px;
+            margin-top: 100px;
+            background-color: #ffffff;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .error-heading {
+            font-size: 30px;
+            font-weight: bold;
+            margin-top: 20px;
+            color: #dc3545;
+            text-align: center;
+        }
+
+        .error-message {
+            font-size: 16px;
+            color: #333333;
+        }
+
+        .error-link {
+            margin-top: 20px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="error-heading">Error Occurred</h1>
+        <div class="error-container">
+            <p class="error-message">{{ error_message }}</p>
+        </div>
+        <p class="error-link">
+            <a href="/" class="btn btn-primary">Go Back Home</a>
+        </p>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
