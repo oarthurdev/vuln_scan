@@ -5,50 +5,51 @@ import time
 import bleach
 from flask_compress import Compress
 from flask import Flask, render_template, request
+from flask_caching import Cache
 import concurrent.futures
 
 app = Flask(__name__)
 Compress(app)
 
-@app.route('/', methods=['GET', 'POST'])
+cache = Cache(app, config={'CACHE_TYPE': 'simple'})
+
+@app.route('/', methods=['GET'])
 def index():
-    if request.method == 'POST':
-        url = request.form['url']
-        vulnerabilities = scan(url)
-        return render_template('result.html', url=url, vulnerabilities=vulnerabilities)
     return render_template('index.html')
 
 @app.route('/scan', methods=['POST'])
 def scan():
-    if request.method == 'POST':
-        url = request.form.get('url')
+    url = request.form.get('url').strip()
+    if not is_valid_url(url):
+        error_message = "Invalid URL. Please enter a valid URL."
+        return render_template('index.html', error_message=error_message)
+    if not check_domain_existence(url):
+        error_message = "Invalid URL. Please enter a valid domain."
+        return render_template('index.html', error_message=error_message)
 
-        # Check domain existence
-        if not check_domain_existence(url):
-            error_message = "Invalid URL. Please enter a valid domain."
-            return render_template('index.html', error_message=error_message)
-    
-        # Check if the URL is valid
-        if not is_valid_url(url):
-            error_message = "Invalid URL. Please enter a valid URL."
-            return render_template('index.html', error_message=error_message)
+    vulnerabilities = check_vulnerabilities(url)
+    return render_template('result.html', url=url, vulnerabilities=vulnerabilities)
 
-        vulnerabilities = check_vulnerabilities(url)
-
-        # Render the result template with the URL and vulnerabilities
-        return render_template('result.html', url=url, vulnerabilities=vulnerabilities)
 
 def is_valid_url(url):
+    """Verifica se uma url eh valida
+
+    Args:
+        url (String): Url para testar
+
+    Returns:
+        bool: Verificacao da url (true = existe, false = nao existe)
+    """
     # Regex pattern to validate URL format
-    url_pattern = r'^(http|https)://[^\s/$.?#].[^\s]*$'
-    return bool(re.match(url_pattern, url))
+    url_pattern = re.compile(r'^(http|https)://[^\s/$.?#].[^\s]*$', re.IGNORECASE)
+    return re.match(url_pattern, url) is not None
 
 def check_domain_existence(url):
     parsed_url = urlparse(url)
     domain = parsed_url.netloc
 
     try:
-        response = requests.head(url)
+        response = requests.head(url, timeout=5)
         if response.status_code == 200:
             return True
     except requests.exceptions.RequestException:
@@ -56,13 +57,17 @@ def check_domain_existence(url):
 
     return False
 
+HEADER_X_CONTENT_TYPE_OPTIONS = "X-Content-Type-Options"
+
 def check_mimetype_sniffing(response):
-    if "X-Content-Type-Options" not in response.headers:
+    if response.headers.get(HEADER_X_CONTENT_TYPE_OPTIONS, "").lower() != "nosniff":
         return "Vulnerability: MIME sniffing"
     return None
 
-def check_sql_injection(url):
-    sqlmap_url = "http://127.0.0.1:8775"
+SQLMAP_URL = "http://127.0.0.1:8775"
+
+def create_task(url):
+    sqlmap_url = SQLMAP_URL
 
     options = {
         'url': url,
@@ -81,14 +86,23 @@ def check_sql_injection(url):
 
         if start_response.status_code == 200:
             print("Tarefa iniciada com sucesso.")
+            return task_id
         else:
             print("Erro ao iniciar a tarefa:", start_response.text)
     else:
         task_id = None
         print("Erro na solicitação POST para o sqlmap API:", task_response.text)
 
+    return task_id
+
+def check_task_status(task_id):
+    sqlmap_url = SQLMAP_URL
+
     # Wait until the task is terminated
-    while True:
+    timeout = 60  # seconds
+    start_time = time.time()
+
+    while time.time() - start_time < timeout:
         task_status_url = f"{sqlmap_url}/scan/{task_id}/status"
         status_response = requests.get(task_status_url)
         status_data = status_response.json()
@@ -106,6 +120,14 @@ def check_sql_injection(url):
                 return []
 
         time.sleep(1)
+
+    return None
+
+def check_sql_injection(url):
+    task_id = create_task(url)
+    
+    if task_id is not None:
+        return check_task_status(task_id)
 
     return None
 
@@ -131,6 +153,7 @@ def check_security_headers(response):
 
     return vulnerabilities
 
+@cache.memoize(timeout=300)  # Cache results for 5 minutes
 def check_vulnerabilities(url):
     headers = {
         'Accept-Encoding': 'gzip, deflate'
