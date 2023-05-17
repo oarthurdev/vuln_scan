@@ -1,45 +1,49 @@
+<!-- index.html -->
+
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vulnerability Scanner</title>
+    <script
+        src="https://code.jquery.com/jquery-3.7.0.min.js"
+        integrity="sha256-2Pmvv0kuTBOenSvLm6bvfBSSHrUJ+3A7x6P5Ebd07/g="
+        crossorigin="anonymous"></script>
     <!-- Bootstrap CSS -->
     <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
-    <style>
-        .loader {
-            display: none;
-        }
-        .loader.show {
-            display: inline-block;
-        }
-    </style>
+    <title>Vulnerability Scanner</title>
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <div class="container mt-5">
-        <h1>Vulnerability Scanner</h1>
-        <form method="POST" action="/scan">
+    <div class="container">
+        <h1 class="mt-5">Vulnerability Scanner</h1>
+
+        <form action="{{ url_for('scan') }}" method="POST" class="my-4">
             <div class="form-group">
-                <label for="urlInput">Enter the URL to scan:</label>
-                <input type="text" class="form-control" id="urlInput" name="url" placeholder="https://www.example.com">
+            <input type="text" name="url" class="form-control" placeholder="Enter URL">
             </div>
-            <button type="submit" class="btn btn-primary" id="scanButton">
+            <button type="submit" id="scanButton" class="btn btn-primary" onclick="startLoading()">
                 <span class="spinner-border spinner-border-sm loader" role="status" aria-hidden="true"></span>
                 Scan
-            </button>   
+                </button>
         </form>
+
         {% if error_message %}
             <div class="alert alert-danger mt-3" role="alert">
                 {{ error_message }}
             </div>
         {% endif %}
+        <div id="loading-bar">
+            <div id="progress"></div>
+        </div>
     </div>
-    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
     <script>
         document.querySelector("form").addEventListener("submit", function() {
             document.querySelector(".loader").classList.add("show");
             document.getElementById("scanButton").disabled = true;
         });
     </script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>

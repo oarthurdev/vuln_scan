@@ -1,20 +1,24 @@
 from urllib.parse import urlparse
 import requests
 import re
+import time
+import bleach
+from flask_compress import Compress
 from flask import Flask, render_template, request
 
 app = Flask(__name__)
+Compress(app)
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
     if request.method == 'POST':
         url = request.form['url']
-        vulnerabilities = perform_scan(url)
+        vulnerabilities = scan(url)
         return render_template('result.html', url=url, vulnerabilities=vulnerabilities)
     return render_template('index.html')
 
 @app.route('/scan', methods=['POST'])
-def perform_scan():
+def scan():
     if request.method == 'POST':
         url = request.form.get('url')
 
@@ -38,13 +42,74 @@ def check_mimetype_sniffing(response):
         return "Vulnerability: MIME sniffing"
     return None
 
-def check_sql_injection(response):
-    if "SQL" in response.text:
-        return "Vulnerability: SQL Injection"
+
+def check_sql_injection(url):
+    # Execute a solicitação GET para obter a resposta
+    response = requests.get(url)
+
+    # Caso contrário, envie a solicitação para o sqlmap API
+    sqlmap_url = "http://127.0.0.1:8775"  # Atualize com o URL correto do sqlmap API
+    
+    # Opções do SQLMap API
+    options = {
+        'url': url,  # Substitua target_url pela variável que contém a URL
+        'batch': True,
+        'level': 1,
+        'risk': 1,
+        'randomAgent': True
+    }
+
+    # Envie a solicitação POST para o sqlmap API para criar uma nova tarefa
+    task_response = requests.get(f"{sqlmap_url}/task/new", json=options)
+
+    if task_response.status_code == 200:
+        task_id = task_response.json().get("taskid")
+        # Inicie a tarefa manualmente
+        start_task_url = f"{sqlmap_url}/scan/{task_id}/start"
+        start_response = requests.post(start_task_url, json=options)
+
+        print(start_response.content)
+        if start_response.status_code == 200:
+            print("Tarefa iniciada com sucesso.")
+        else:
+            print("Erro ao iniciar a tarefa:", start_response.text)
+    else:
+        # Lida com o erro na resposta do POST
+        task_id = None
+        print("Erro na solicitação POST para o sqlmap API:", task_response.text)
+
+    print(task_id)
+
+    # Aguarde até que a tarefa esteja concluída
+    while True:
+        # Consulte o status da tarefa usando o ID da tarefa
+        task_status_url = f"{sqlmap_url}/scan/{task_id}/status"
+        status_response = requests.get(task_status_url)
+        status_data = status_response.json()
+
+        print(status_data)
+
+        # Verifique se a tarefa foi concluída
+        if status_data.get("status") == "terminated":
+            # Consulte os detalhes da tarefa concluída
+            task_details_url = f"{sqlmap_url}/scan/{task_id}/data"
+            details_response = requests.get(task_details_url)
+            details_data = details_response.json()
+        
+            # Verifique se há uma vulnerabilidade de SQL Injection nos detalhes da tarefa
+            if details_data['data'] != []:   
+                return "Vulnerability: SQL Injection"
+            else:
+                return []
+
+        # Aguarde um momento antes de verificar o status novamente
+        time.sleep(1)
+
     return None
 
 def check_xss_vulnerability(response):
-    if "<script>" in response.text:
+    cleaned_html = bleach.clean(response.text, tags=[], attributes={}, strip=True)
+    if response.text != cleaned_html:
         return "Vulnerability: Cross-Site Scripting (XSS)"
     return None
 
@@ -75,11 +140,14 @@ def check_file_inclusion(response):
     return None
 
 def check_vulnerabilities(url):
-    response = requests.get(url)
+    headers = {
+        'Accept-Encoding': 'gzip, deflate'
+    }
+    response = requests.get(url, headers=headers)
 
     vulnerabilities = []
     vulnerabilities.append(check_mimetype_sniffing(response))
-    vulnerabilities.append(check_sql_injection(response))
+    vulnerabilities.append(check_sql_injection(url))
     vulnerabilities.append(check_xss_vulnerability(response))
     vulnerabilities.extend(check_security_headers(response))
     vulnerabilities.append(check_command_injection(response))
